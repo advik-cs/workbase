@@ -18,6 +18,7 @@ import {
   submitReconfirmation,
   getReconfirmationStatus,
   getCommunityReconfirmationStats,
+  getWaterLevel,
 } from '../controllers/disasterController.ts';
 import { getShelterOccupancy } from '../controllers/shelterController.ts';
 import {
@@ -65,6 +66,7 @@ router.get('/disasters/:id/reconfirmation-status', requireAuth, getReconfirmatio
 router.get('/disasters/:id/reconfirmation/my-status', requireAuth, getReconfirmationStatus);
 router.get('/disasters/:id/reconfirmations/status', requireAuth, getReconfirmationStatus);
 router.get('/disasters/:id/reconfirmation/community-stats', requireAuth, getCommunityReconfirmationStats);
+router.get('/disasters/:id/sensors/water-level', requireAuth, getWaterLevel);
 
 // Live Emergency Status & Requests within Disaster
 router.get('/disasters/:id/my-status', requireAuth, getMyStatus);

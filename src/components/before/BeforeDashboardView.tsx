@@ -42,6 +42,8 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
   
   const [communityStats, setCommunityStats] = useState<{ percentage: number } | null>(null);
   const [communityLoading, setCommunityLoading] = useState(false);
+  const [waterLevelStats, setWaterLevelStats] = useState<any>(null);
+  const [waterLevelLoading, setWaterLevelLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -78,7 +80,16 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
             }
           })
           .catch(() => null)
-          .finally(() => setCommunityLoading(false));
+          .finally(() => {
+            setCommunityLoading(false);
+            setWaterLevelLoading(true);
+            beforeApi.getWaterLevel(activeDisaster.id)
+              .then(res => {
+                if (res) setWaterLevelStats(res);
+              })
+              .catch(() => null)
+              .finally(() => setWaterLevelLoading(false));
+          });
       }
     } finally {
       setLoading(false);
@@ -496,12 +507,29 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
             <div className="space-y-4">
               <div>
                 <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
-                  <span className="text-[#2F4156]">River Gauge Level (Basin Causeway)</span>
-                  <span className="text-gray-400 font-bold">Data unavailable</span>
+                  <span className="text-[#2F4156]">{waterLevelStats?.stationName || 'Water Level Sensor'}</span>
+                  {waterLevelLoading ? (
+                    <span className="text-gray-400 font-bold animate-pulse">Loading...</span>
+                  ) : waterLevelStats && waterLevelStats.available ? (
+                    <span className="text-[#2F4156] font-bold">{waterLevelStats.waterLevel} {waterLevelStats.unit}</span>
+                  ) : (
+                    <span className="text-gray-400 font-bold">Data unavailable</span>
+                  )}
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-[#F5EFEB] overflow-hidden">
-                  <div className="h-full rounded-full bg-gray-300 w-0" />
+                  <div 
+                    className="h-full rounded-full transition-all duration-1000 bg-gray-300"
+                    style={{ 
+                      width: waterLevelStats?.available && waterLevelStats?.warningLevel ? `${Math.min((waterLevelStats.waterLevel / waterLevelStats.warningLevel) * 100, 100)}%` : '0%',
+                      backgroundColor: waterLevelStats?.available && waterLevelStats?.dangerLevel && waterLevelStats.waterLevel >= waterLevelStats.dangerLevel ? '#EF4444' : 
+                                       waterLevelStats?.available && waterLevelStats?.warningLevel && waterLevelStats.waterLevel >= waterLevelStats.warningLevel ? '#F59E0B' : 
+                                       waterLevelStats?.available ? '#3B82F6' : '#D1D5DB'
+                    }}
+                  />
                 </div>
+                {waterLevelStats?.available && waterLevelStats?.observedAt && (
+                  <p className="text-[10px] text-gray-500 mt-1">Updated {new Date(waterLevelStats.observedAt).toLocaleTimeString()}</p>
+                )}
               </div>
 
               <div>

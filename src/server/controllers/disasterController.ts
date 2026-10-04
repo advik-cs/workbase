@@ -878,3 +878,25 @@ export async function getCommunityReconfirmationStats(req: AuthenticatedRequest,
     res.status(500).json({ error: error.message || 'Failed to get community reconfirmation stats.' });
   }
 }
+
+export async function getWaterLevel(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.userId;
+    const household = await prisma.household.findFirst({ where: { userId } });
+    if (!household) {
+      res.status(403).json({ error: 'Unauthorized. No household found.' });
+      return;
+    }
+    
+    // Check if KSNDMC or CWC integration has relevant stations for the household's lat/lng
+    // Currently, there is no public open REST API for KSNDMC storm water drain sensors
+    // and CWC telemetry requires offline registration/API keys via NWIC/India-WRIS.
+    
+    res.json({
+      available: false,
+      reason: 'NO_RELEVANT_GAUGE'
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to get water level.' });
+  }
+}

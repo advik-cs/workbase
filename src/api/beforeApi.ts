@@ -445,6 +445,10 @@ export const beforeApi = {
     return beforeRequest<any>(`/disasters/${disasterId}/reconfirmation/community-stats`);
   },
 
+  async getWaterLevel(disasterId: string) {
+    return beforeRequest<any>(`/disasters/${disasterId}/sensors/water-level`);
+  },
+
   async submitReconfirmation(
     disasterId: string,
     payload: BatchReconfirmationPayload | ReconfirmationItemInput[]
