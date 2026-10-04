@@ -794,3 +794,66 @@ export async function getReconfirmationStatus(req: AuthenticatedRequest, res: Re
     res.status(500).json({ error: error.message || 'Failed to get reconfirmation status.' });
   }
 }
+
+export async function getCommunityReconfirmationStats(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { id: disasterId } = req.params;
+    const userId = req.user!.userId;
+    const userRole = req.user!.role;
+
+    if (userRole === 'CITIZEN') {
+      const household = await prisma.household.findFirst({
+        where: { userId },
+        include: {
+          members: {
+            include: {
+              expectedLocations: { where: { disasterId } }
+            }
+          }
+        }
+      });
+      if (!household) {
+        res.status(403).json({ error: 'Unauthorized. No household found.' });
+        return;
+      }
+      
+      const isRelated = household.members.some(m => m.expectedLocations.length > 0);
+      if (!isRelated) {
+        res.status(403).json({ error: 'Unauthorized to view stats for an unrelated disaster.' });
+        return;
+      }
+    }
+    
+    const expectedLocations = await prisma.expectedLocation.findMany({
+      where: { disasterId },
+      include: { householdMember: true }
+    });
+
+    const householdMap = new Map<string, boolean>();
+
+    for (const exp of expectedLocations) {
+      const hId = exp.householdMember.householdId;
+      if (!householdMap.has(hId)) {
+        householdMap.set(hId, false);
+      }
+      // Consider ANY non-null status as successfully completed/verified response
+      if (exp.reconfirmedStatus != null) {
+        householdMap.set(hId, true);
+      }
+    }
+
+    const totalEligible = householdMap.size;
+    let verified = 0;
+    for (const isVerified of householdMap.values()) {
+      if (isVerified) verified++;
+    }
+
+    res.json({
+      totalEligible,
+      verified,
+      percentage: totalEligible > 0 ? Math.round((verified / totalEligible) * 100) : 0
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to get community reconfirmation stats.' });
+  }
+}

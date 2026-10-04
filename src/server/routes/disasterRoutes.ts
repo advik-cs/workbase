@@ -17,6 +17,7 @@ import {
   getZoneSummary,
   submitReconfirmation,
   getReconfirmationStatus,
+  getCommunityReconfirmationStats,
 } from '../controllers/disasterController.ts';
 import { getShelterOccupancy } from '../controllers/shelterController.ts';
 import {
@@ -63,6 +64,7 @@ router.post('/disasters/:id/reconfirm', requireAuth, submitReconfirmation);
 router.get('/disasters/:id/reconfirmation-status', requireAuth, getReconfirmationStatus);
 router.get('/disasters/:id/reconfirmation/my-status', requireAuth, getReconfirmationStatus);
 router.get('/disasters/:id/reconfirmations/status', requireAuth, getReconfirmationStatus);
+router.get('/disasters/:id/reconfirmation/community-stats', requireAuth, getCommunityReconfirmationStats);
 
 // Live Emergency Status & Requests within Disaster
 router.get('/disasters/:id/my-status', requireAuth, getMyStatus);

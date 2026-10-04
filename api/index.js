@@ -1528,6 +1528,37 @@ async function getReconfirmationStatus(req, res) {
     res.status(500).json({ error: error.message || "Failed to get reconfirmation status." });
   }
 }
+async function getCommunityReconfirmationStats(req, res) {
+  try {
+    const { id: disasterId } = req.params;
+    const expectedLocations = await database_default.expectedLocation.findMany({
+      where: { disasterId },
+      include: { householdMember: true }
+    });
+    const householdMap = /* @__PURE__ */ new Map();
+    for (const exp of expectedLocations) {
+      const hId = exp.householdMember.householdId;
+      if (!householdMap.has(hId)) {
+        householdMap.set(hId, false);
+      }
+      if (exp.reconfirmedStatus != null) {
+        householdMap.set(hId, true);
+      }
+    }
+    const totalEligible = householdMap.size;
+    let verified = 0;
+    for (const isVerified of householdMap.values()) {
+      if (isVerified) verified++;
+    }
+    res.json({
+      totalEligible,
+      verified,
+      percentage: totalEligible > 0 ? Math.round(verified / totalEligible * 100) : 0
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Failed to get community reconfirmation stats." });
+  }
+}
 
 // src/server/controllers/shelterController.ts
 function cleanShelterName(name) {
@@ -2191,6 +2222,7 @@ router3.post("/disasters/:id/reconfirm", requireAuth, submitReconfirmation);
 router3.get("/disasters/:id/reconfirmation-status", requireAuth, getReconfirmationStatus);
 router3.get("/disasters/:id/reconfirmation/my-status", requireAuth, getReconfirmationStatus);
 router3.get("/disasters/:id/reconfirmations/status", requireAuth, getReconfirmationStatus);
+router3.get("/disasters/:id/reconfirmation/community-stats", requireAuth, getCommunityReconfirmationStats);
 router3.get("/disasters/:id/my-status", requireAuth, getMyStatus);
 router3.post("/disasters/:id/status", requireAuth, updateStatus);
 router3.post("/disasters/:id/emergency-requests", requireAuth, createEmergencyRequest);

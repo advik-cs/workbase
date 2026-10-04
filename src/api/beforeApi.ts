@@ -441,6 +441,10 @@ export const beforeApi = {
     return beforeRequest<any>(`/disasters/${disasterId}/reconfirmations/status`);
   },
 
+  async getCommunityReconfirmationStats(disasterId: string) {
+    return beforeRequest<any>(`/disasters/${disasterId}/reconfirmation/community-stats`);
+  },
+
   async submitReconfirmation(
     disasterId: string,
     payload: BatchReconfirmationPayload | ReconfirmationItemInput[]

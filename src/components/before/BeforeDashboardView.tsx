@@ -4,6 +4,9 @@ import { householdService, Household } from '../../services/householdService.ts'
 import { shelterService, ShelterOccupancy } from '../../services/shelterService.ts';
 import { User } from '../../services/authService.ts';
 import { BeforeTab } from '../layout/DashboardLayout.tsx';
+import { offlineCacheService } from '../../offline/cacheService';
+import { beforeApi } from '../../api/beforeApi';
+import type { LiveWeatherData } from '../common/LiveWeatherCard';
 import {
   Users,
   Tent,
@@ -33,6 +36,13 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
   const [shelters, setShelters] = useState<ShelterOccupancy[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [weatherData, setWeatherData] = useState<LiveWeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherOffline, setWeatherOffline] = useState(false);
+  
+  const [communityStats, setCommunityStats] = useState<{ percentage: number } | null>(null);
+  const [communityLoading, setCommunityLoading] = useState(false);
+
   useEffect(() => {
     loadData();
   }, [activeDisaster?.id]);
@@ -41,11 +51,34 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
     setLoading(true);
     try {
       const hh = await householdService.getMyHousehold().catch(() => null);
-      if (hh) setHousehold(hh);
+      if (hh) {
+        setHousehold(hh);
+        if (hh.latitude && hh.longitude) {
+          setWeatherLoading(true);
+          offlineCacheService.getHazardSnapshotWithFallback(hh.latitude, hh.longitude)
+            .then(res => {
+              if (res.ok && res.data?.data) {
+                setWeatherData(res.data.data);
+                setWeatherOffline(res.data.source === 'cache' || res.data.isStale);
+              }
+            })
+            .finally(() => setWeatherLoading(false));
+        }
+      }
 
       if (activeDisaster) {
         const sList = await shelterService.getShelterOccupancy(activeDisaster.id).catch(() => []);
         setShelters(sList);
+
+        setCommunityLoading(true);
+        beforeApi.getCommunityReconfirmationStats(activeDisaster.id)
+          .then(res => {
+            if (res && typeof res.percentage === 'number') {
+              setCommunityStats(res);
+            }
+          })
+          .catch(() => null)
+          .finally(() => setCommunityLoading(false));
       }
     } finally {
       setLoading(false);
@@ -57,6 +90,20 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
   const children = household?.members?.filter((m) => m.category === 'CHILD').length || 0;
   const elderly = household?.members?.filter((m) => m.category === 'ELDERLY').length || 0;
   const isAuthority = user.role === 'AUTHORITY';
+
+  // Sensor Intelligence Metrics
+  const maxPrecip = weatherData?.hourly
+    ? Math.max(...weatherData.hourly.map((h) => h.precip || 0))
+    : null;
+  const precipPct = maxPrecip !== null ? Math.min(100, Math.round((maxPrecip / 50) * 100)) : 0; // scale: 50mm/hr = 100%
+  const precipLabel = weatherLoading 
+    ? 'Loading...' 
+    : (maxPrecip !== null ? `${maxPrecip.toFixed(1)} mm/hr${weatherOffline ? ' (Cached)' : ''}` : 'Data unavailable');
+
+  const commPct = communityStats?.percentage ?? 0;
+  const commLabel = communityLoading 
+    ? 'Loading...' 
+    : (communityStats ? `${commPct}% Verified` : 'Data unavailable');
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -450,20 +497,23 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
               <div>
                 <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
                   <span className="text-[#2F4156]">River Gauge Level (Basin Causeway)</span>
-                  <span className="text-red-600 font-bold">4.8m (Warning: 5.0m)</span>
+                  <span className="text-gray-400 font-bold">Data unavailable</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-[#F5EFEB] overflow-hidden">
-                  <div className="h-full rounded-full bg-red-500 w-[85%]" />
+                  <div className="h-full rounded-full bg-gray-300 w-0" />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
                   <span className="text-[#2F4156]">Precipitation Rate (Next 12h)</span>
-                  <span className="text-amber-600 font-bold">34 mm/hr</span>
+                  <span className={`${maxPrecip !== null ? 'text-amber-600' : 'text-gray-400'} font-bold`}>{precipLabel}</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-[#F5EFEB] overflow-hidden">
-                  <div className="h-full rounded-full bg-amber-500 w-[65%]" />
+                  <div 
+                    className="h-full rounded-full bg-amber-500 transition-all duration-1000" 
+                    style={{ width: `${precipPct}%` }} 
+                  />
                 </div>
               </div>
 
@@ -472,10 +522,13 @@ export const BeforeDashboardView: React.FC<BeforeDashboardViewProps> = ({
                   <span className="text-[#2F4156]">
                     {isAuthority ? 'Community Evacuation Readiness' : 'Community Reconfirmation Response'}
                   </span>
-                  <span className="text-[#567C8D] font-bold">78% Verified</span>
+                  <span className={`${communityStats ? 'text-[#567C8D]' : 'text-gray-400'} font-bold`}>{commLabel}</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-[#F5EFEB] overflow-hidden">
-                  <div className="h-full rounded-full bg-[#567C8D] w-[78%]" />
+                  <div 
+                    className="h-full rounded-full bg-[#567C8D] transition-all duration-1000" 
+                    style={{ width: `${commPct}%` }} 
+                  />
                 </div>
               </div>
             </div>

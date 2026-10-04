@@ -24,6 +24,7 @@ export interface HourlyForecast {
   time: string;
   temp: number;
   precipProb: number;
+  precip?: number;
   weatherCode: number;
 }
 
@@ -433,7 +434,7 @@ export const LiveWeatherCard: React.FC<LiveWeatherCardProps> = ({
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                  {weatherData.hourly.map((hour, idx) => {
+                  {weatherData.hourly.slice(0, 6).map((hour, idx) => {
                     const hDetails = getWmoDetails(hour.weatherCode);
                     const HIcon = hDetails.icon;
                     let displayTime = hour.time;

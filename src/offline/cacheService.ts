@@ -758,7 +758,7 @@ export const offlineCacheService = {
 
     // 1. ONLINE ATTEMPT
     try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,precipitation_probability,weather_code&forecast_hours=6&timezone=auto`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m&hourly=temperature_2m,precipitation_probability,precipitation,weather_code&forecast_hours=12&timezone=auto`;
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
@@ -769,13 +769,15 @@ export const offlineCacheService = {
         const times = hourly.time || [];
         const temps = hourly.temperature_2m || [];
         const pops = hourly.precipitation_probability || [];
+        const precips = hourly.precipitation || [];
         const codes = hourly.weather_code || [];
 
-        for (let i = 0; i < Math.min(6, times.length); i++) {
+        for (let i = 0; i < Math.min(12, times.length); i++) {
           nextHours.push({
             time: times[i],
             temp: temps[i] ?? current.temperature_2m ?? 0,
             precipProb: pops[i] ?? 0,
+            precip: precips[i] ?? 0,
             weatherCode: codes[i] ?? current.weather_code ?? 0,
           });
         }
