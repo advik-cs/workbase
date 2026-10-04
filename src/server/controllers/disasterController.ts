@@ -738,6 +738,38 @@ export async function submitReconfirmation(req: AuthenticatedRequest, res: Respo
   }
 }
 
+export async function getReconfirmationSummaryHelper(disasterId: string, householdId?: string) {
+  const whereClause: any = { disasterId };
+  if (householdId) {
+    whereClause.householdMember = { householdId };
+  }
+
+  const expectedLocations = await prisma.expectedLocation.findMany({
+    where: whereClause,
+  });
+
+  let confirmedSame = 0;
+  let changed = 0;
+  let uncertain = 0;
+  let pending = 0;
+
+  for (const exp of expectedLocations) {
+    if (exp.reconfirmedStatus === 'SAME_PLAN') confirmedSame++;
+    else if (exp.reconfirmedStatus === 'CHANGE_LOCATION') changed++;
+    else if (exp.reconfirmedStatus === 'NOT_SURE') uncertain++;
+    else pending++;
+  }
+
+  return {
+    totalExpected: expectedLocations.length,
+    totalAffectedMembers: expectedLocations.length,
+    confirmedSame,
+    changed,
+    uncertain,
+    pending,
+  };
+}
+
 export async function getReconfirmationStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const { id: disasterId } = req.params;
@@ -749,12 +781,9 @@ export async function getReconfirmationStatus(req: AuthenticatedRequest, res: Re
       return;
     }
 
-    // Backend determines if reconfirmation is required:
-    // Approximately 30 hours before a predicted disaster (or whenever status is PREDICTED within 48h)
     const now = new Date().getTime();
     const startTime = new Date(disaster.predictedStartTime).getTime();
     const hoursUntilDisaster = (startTime - now) / (1000 * 60 * 60);
-
     const isReconfirmationWindow = hoursUntilDisaster <= 36 && hoursUntilDisaster > 0;
 
     const household = await prisma.household.findFirst({
@@ -762,9 +791,7 @@ export async function getReconfirmationStatus(req: AuthenticatedRequest, res: Re
       include: {
         members: {
           include: {
-            expectedLocations: {
-              where: { disasterId },
-            },
+            expectedLocations: { where: { disasterId } },
           },
         },
       },
@@ -781,6 +808,13 @@ export async function getReconfirmationStatus(req: AuthenticatedRequest, res: Re
       }
     }
 
+    let summary: any = undefined;
+    if (req.user!.role === 'AUTHORITY') {
+      summary = await getReconfirmationSummaryHelper(disasterId);
+    } else if (household) {
+      summary = await getReconfirmationSummaryHelper(disasterId, household.id);
+    }
+
     res.json({
       disasterId,
       disasterTitle: disaster.title,
@@ -789,6 +823,7 @@ export async function getReconfirmationStatus(req: AuthenticatedRequest, res: Re
       isReconfirmationRequired: isReconfirmationWindow || !currentStatus,
       currentStatus,
       reconfirmedAt,
+      summary,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to get reconfirmation status.' });
@@ -800,6 +835,8 @@ export async function getCommunityReconfirmationStats(req: AuthenticatedRequest,
     const { id: disasterId } = req.params;
     const userId = req.user!.userId;
     const userRole = req.user!.role;
+
+    let targetHouseholdId: string | undefined = undefined;
 
     if (userRole === 'CITIZEN') {
       const household = await prisma.household.findFirst({
@@ -822,31 +859,15 @@ export async function getCommunityReconfirmationStats(req: AuthenticatedRequest,
         res.status(403).json({ error: 'Unauthorized to view stats for an unrelated disaster.' });
         return;
       }
+
+      targetHouseholdId = household.id;
     }
     
-    const expectedLocations = await prisma.expectedLocation.findMany({
-      where: { disasterId },
-      include: { householdMember: true }
-    });
+    // Reuse EXACT SAME logic as existing Reconfirmation View!
+    const summary = await getReconfirmationSummaryHelper(disasterId, targetHouseholdId);
 
-    const householdMap = new Map<string, boolean>();
-
-    for (const exp of expectedLocations) {
-      const hId = exp.householdMember.householdId;
-      if (!householdMap.has(hId)) {
-        householdMap.set(hId, false);
-      }
-      // Consider ANY non-null status as successfully completed/verified response
-      if (exp.reconfirmedStatus != null) {
-        householdMap.set(hId, true);
-      }
-    }
-
-    const totalEligible = householdMap.size;
-    let verified = 0;
-    for (const isVerified of householdMap.values()) {
-      if (isVerified) verified++;
-    }
+    const verified = summary.confirmedSame + summary.changed + summary.uncertain;
+    const totalEligible = summary.totalAffectedMembers;
 
     res.json({
       totalEligible,
